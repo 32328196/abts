@@ -1,20 +1,20 @@
 name: Build Unassigned iOS IPA
 
 on:
-  workflow_dispatch: # 支持在网页上手动一键触发
+  workflow_dispatch:
 
 jobs:
   build-ios:
-    runs-on: macos-latest # 使用 GitHub 免费的云端 Mac 环境
+    runs-on: macos-latest
 
     steps:
       - name: 1. 拉取项目源码
         uses: actions/checkout@v4
 
-      - name: 2. 安装 Flutter 环境
+      - name: 2. 安装指定版本 Flutter 环境 (匹配 Dart ^3.10.8)
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.38.0'
+          flutter-version: '3.50.1'
           channel: 'stable'
 
       - name: 3. 自动生成 iOS 工程目录并获取依赖
@@ -22,18 +22,25 @@ jobs:
           flutter create --platforms=ios .
           flutter pub get
 
-      - name: 4. 配置 iOS 后台播放与相册权限
+      - name: 4. 配置 iOS 最低版本、后台播放与相册权限
         run: |
           # 开启锁屏/后台音频播放权限，防止切出应用后断流
-          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes array" ios/Runner/Info.plist
-          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:0 string audio" ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes array" ios/Runner/Info.plist || true
+          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:0 string audio" ios/Runner/Info.plist || true
           # 添加保存二维码到相册的权限说明
-          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryAddUsageDescription string 需要相册权限以保存登录二维码" ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryAddUsageDescription string 需要相册权限以保存登录二维码" ios/Runner/Info.plist || true
+          # 预下载 iOS 构建工具并确保 Podfile 最低系统版本为 iOS 13.0
+          flutter precache --ios
+          cd ios
+          pod init || true
+          sed -i '' "s/# platform :ios, '9.0'/platform :ios, '13.0'/g" Podfile || true
+          sed -i '' "s/platform :ios, '12.0'/platform :ios, '13.0'/g" Podfile || true
+          cd ..
 
       - name: 5. 安装 CocoaPods 依赖
         run: |
           cd ios
-          pod install
+          pod install --repo-update
           cd ..
 
       - name: 6. 编译无签名 iOS 应用 (Runner.app)
